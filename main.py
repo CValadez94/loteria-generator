@@ -4,92 +4,156 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 
-PIC_DIR = os.getcwd() + '/pics/'
 
+class LoteriaCardGenerator(object):
+    # r: Number of calling cards
+    # k: Number of tiles per game card
+    # g: Number of game cards
+    def __init__(self, _r, _cols, _rows, _g):
+        self.r = _r
+        self.cols = _cols
+        self.rows = _rows
+        self.k = _cols * _rows
+        self.g = _g
+        self.PIC_DIR = os.getcwd() + '/pics/'
+        self.images = []
+        self.game_card_sets = []
 
-def get_images():
-    print("Getting images...")
-    _images = []
-    _f_paths = [n for n in os.listdir(PIC_DIR) if os.path.isfile(os.path.join(PIC_DIR, n))]
-    _f_paths.sort()
-    for f in _f_paths:
-        _images.append(cv.imread(os.path.join(PIC_DIR, f)))
-    print("Got {:d} images".format(len(_images)))
+    def get_images(self):
+        print("Getting images...")
+        _cc_path = self.PIC_DIR + '/calling_cards'
+        _f_paths = [n for n in os.listdir(_cc_path) if os.path.isfile(os.path.join(_cc_path, n))]
 
-    return _images
+        # Do a sanity check first to make sure number of calling card pictures matches r
+        if len(_f_paths) != self.r:
+            print("You said there are {} calling cards, but I see {} images..\n"
+                  "I can't work under these conditions! Aborting."
+                  .format(self.r, len(_f_paths)))
+            return False
 
+        _f_paths.sort()
+        for f in _f_paths:
+            self.images.append(cv.imread(os.path.join(_cc_path, f)))
+        print("Got {:d} images".format(len(self.images)))
+        return True
 
-def create_collage(_img, p1, p2, p3, p4, _name):
-    h1 = np.hstack([_img[p1 - 1], _img[p2 - 1]])
-    h2 = np.hstack([_img[p3 - 1], _img[p4 - 1]])
-    v = np.vstack([h1, h2])
-    cv.imwrite(PIC_DIR + _name + ".jpeg", v)
-    print("Created {:s}".format(_name))
+    def create_collage(self, _set, _name):
+        h = []
+        v = []
+        for i in range(self.cols):
+            for j in range(self.rows):
+                h.append(self.images[_set[i * self.cols + j] - 1])
+            v.append(np.hstack(h))
+            h.clear()
 
+        img = np.vstack(v)
+        cv.imwrite(self.PIC_DIR + '/output/' + _name + ".jpeg", img)
 
-# r: Number of calling cards
-# k: Number of tiles per game card
-# g: Number of game cards
-def create_random_set(r, k, g):
-    game_cards = []
-    game_cards_sorted = []
+    def assemble_gaming_cards(self):
+        for i in range(self.g):
+            name = 'GC' + str(i + 1)
+            print("  *Create game card {}".format(name))
+            self.create_collage(self.game_card_sets[i], name)
 
-    for i in range(g):
+    def create_game_cards(self):
+        # Sanity check
+        if self.cols < 2 or self.rows < 2:
+            print("Is this a joke? Need at least 2 columns and rows! Aborting.")
+            return
+
+        # Get the images, abort if sanity check not passed
+        if not self.get_images():
+            return
+
         while True:
-            s = random.sample(range(1, r + 1), k)
-            s_sorted = sorted(s)
-            if game_cards_sorted.count(s_sorted):
-                print("Found a duplicate for card {}".format(i))
+            game_card_sets_sorted = []
+            for i in range(self.g):
+                while True:
+                    s = random.sample(range(1, self.r + 1), self.k)
+                    s_sorted = sorted(s)
+                    if game_card_sets_sorted.count(s_sorted):
+                        print("Card {} was duplicate, creating new one..".format(i))
+                    else:
+                        # print("card {}: {}".format(i, s))
+                        self.game_card_sets.append(s)
+                        game_card_sets_sorted.append(s_sorted)
+                        break  # Created a unique game card
+
+            # Print stats and ask user if they are ok to proceed. If not, recreate the game cards
+            self.print_stats()
+            user_input = input("\nOk to proceed? y=yes, n=no, a=abort: ")
+            if user_input == 'y':
+                print("Creating game cards, please wait..")
+                self.assemble_gaming_cards()
+                self.create_report()
+                print("Created {} game cards at {}".format(self.g, self.PIC_DIR + 'output'))
+                break
+            elif user_input == 'a':
+                print("Aborting..")
+                break
+            elif user_input == 'n':
+                print("Recreating the game cards..")
+                plt.clf()
+                self.game_card_sets.clear()  # Clear the list
             else:
-                # print("card {}: {}".format(i, s))
-                game_cards.append(s)
-                game_cards_sorted.append(s_sorted)
-                break  # Created a unique game card
-    return game_cards
+                print("Don't know what you mean, will assume you meant no.")
 
+    def print_stats(self):
+        # Setup the pyplot stuff first
+        plt.clf()
+        plt.xlabel("Calling Card")
+        plt.ylabel("Occurrences")
+        plt.grid()
+        plt.ion()
+        plt.show()
 
-# data: The gaming cards
-# r: Number of calling cards
-def print_stats(data, r):
-    b = np.empty(r, dtype=int)
-    l = len(data)
-    data_flat = sum(data, [])
-    for i in range(r):
-        # print("found i={} {} times".format(i+1, data_flat.count(i+1)))
-        b[i] = data_flat.count(i + 1)
+        _b = np.empty(r, dtype=int)
+        _l = len(self.game_card_sets)
+        plt.title("Total times a calling card shows up out of {} game cards".format(_l))
+        _data_flat = sum(self.game_card_sets, [])
+        for i in range(r):
+            # print("found i={} {} times".format(i+1, data_flat.count(i+1)))
+            _b[i] = _data_flat.count(i + 1)
 
-    # Check if a calling card is not used at all
-    b_list = np.ndarray.tolist(b)
-    if b_list.count(0) > 0:
-        print("There was/were {} calling cards that are not used in any game card.".format(b_list.count(0)))
-    min = b.min()
-    max = b.max()
-    print("Calling card occurences min/max for {} game cards:\n   MIN: {} calling card(s) occured only {} time(s)"
-          "\n   MAX: {} calling card(s) occurred {} time(s)".
-          format(l, b_list.count(min), min, b_list.count(max), max))
+        # Check if a calling card is not used at all
+        _b_list = np.ndarray.tolist(_b)
+        if _b_list.count(0) > 0:
+            print("  There was/were {} calling cards that are not used in any game card.".format(_b_list.count(0)))
+        else:
+            print("  All calling cards were used at least once.")
+        _min = _b.min()
+        _max = _b.max()
+        print("  Calling card occurrences min/max for {} game cards:"
+              "\n   MIN: {} calling card(s) occurred only {} time(s)"
+              "\n   MAX: {} calling card(s) occurred {} time(s)".
+              format(_l, _b_list.count(_min), _min, _b_list.count(_max), _max))
 
-    plt.bar(range(1, r + 1), b)
-    plt.xlabel("Calling Card")
-    plt.ylabel("Occurences")
-    plt.title("Total times a calling card shows up out of {} game cards".format(l))
-    plt.grid()
-    plt.show()
+        plt.bar(range(1, r + 1), _b)
+        plt.pause(0.5)
+
+    # Create a text report in the output folder to show what the algorithm
+    # generated for each game card
+    def create_report(self):
+        lines = []
+        for i in range(self.g):
+            s = 'Card {}: '.format(i + 1)
+            for j in range(self.k):
+                s += str(self.game_card_sets[i][j]) + ' '
+            s += '\n'
+            lines.append(s)
+
+        _path = self.PIC_DIR + '/output/report.txt'
+        _file = open(_path, 'w')
+        _file.writelines(lines)
+        _file.close()
 
 
 if __name__ == '__main__':
-    # Get images
-    # images = get_images()
-
-    r = 52  # Number of calling cards
-    k = 16  # Number of tiles per game card
-    g = 15  # Number of game cards to create
+    r = 54  # Number of calling cards
+    cols = 4  # Number of columns  per game card
+    rows = 4  # Number of rows per game card
+    g = 30  # Number of game cards to create
+    lcg = LoteriaCardGenerator(r, cols, rows, g)
 
     # Create random and unique game cards
-    card_sets = create_random_set(r, k, g)
-    # print("\nSets: {}".format(card_sets))
-
-    # Get some statistics
-    print_stats(card_sets, r)
-
-    # create_collage(images, 1, 2, 3, 4, "C1")
-    print("Created {} game cards.".format(len(card_sets)))
+    lcg.create_game_cards()
