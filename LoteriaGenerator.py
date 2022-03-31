@@ -1,11 +1,10 @@
-import logging
 import os
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 import shutil
-
 import cv2 as cv
+import subprocess
 
 
 class LoteriaGenerator(object):
@@ -100,21 +99,25 @@ class LoteriaGenerator(object):
         gc_insert_out_dir = self._PIC_DIR + '/output/game_card_inserts'
         gc_out_dir = self._PIC_DIR + '/output/game_cards'
         cc_sheets_out_dir = self._PIC_DIR + '/output/calling_card_sheets'
+        pdfs_out_dir = self._PIC_DIR + '/output/pdfs'
+
         if reuse:
             # If reusing, directories should be fine, clean subdirectories except for calling cards
             try:
                 shutil.rmtree(gc_insert_out_dir)
                 shutil.rmtree(gc_out_dir)
+                os.remove(self._PIC_DIR + "/output/pdfs/game_cards.pdf")
             except OSError as e:
                 print("Error: %s" % e.strerror)
-            os.mkdir(gc_insert_out_dir)  # shutil.rmtree() also deletes directory, so recreate it
-            os.mkdir(gc_out_dir)
+
         else:
             # If not reusing, clean entire output directory and create the subdirectories
             self.__verify_output_directory(self._PIC_DIR + '/output')
-            os.makedirs(gc_insert_out_dir)
-            os.makedirs(gc_out_dir)
             os.makedirs(cc_sheets_out_dir)
+            os.mkdir(pdfs_out_dir)
+
+        os.mkdir(gc_insert_out_dir)
+        os.mkdir(gc_out_dir)
 
         # Assemble the game cards
         for i in range(self._gc_count):
@@ -173,6 +176,7 @@ class LoteriaGenerator(object):
                 print("Creating game cards, please wait..")
                 plt.close('all')
                 self.__assemble(reuse)
+                self.__convert2pdf(reuse)
                 # self.create_report()
                 break
             elif confirmation == 'q':
@@ -285,6 +289,19 @@ class LoteriaGenerator(object):
         _file = open(_path, 'w')
         _file.writelines(lines)
         _file.close()
+
+    def __convert2pdf(self, reuse):
+        gc_file_paths = self._PIC_DIR + "/output/game_cards/game_card*.png"
+        cc_file_paths = self._PIC_DIR + "/output/calling_card_sheets/calling_card_sheet*.png"
+
+        print("\n[INFO] Converting game cards to PDF:")
+        subprocess.run(["convert", "-verbose", "-page", "letter",
+                        gc_file_paths, self._PIC_DIR + "/output/pdfs/game_cards.pdf"])
+
+        if not reuse:
+            print("\n[INFO] Converting callings cards to PDF:")
+            subprocess.run(["convert", "-verbose", "-page", "letter",
+                            cc_file_paths, self._PIC_DIR + "/output/pdfs/calling_cards.pdf"])
 
     def __verify_output_directory(self, out_dir):
         """Verify the output directory exists
