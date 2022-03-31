@@ -71,7 +71,7 @@ class LoteriaGenerator(object):
         new_insert_dim = (desired_width, int((desired_width / img_gc_insert.shape[1]) * img_gc_insert.shape[0]))
         insert_resized = cv.resize(img_gc_insert, new_insert_dim, interpolation=cv.INTER_AREA)
         img_gc = self._gc_templ_images[card_number]
-        img_gc[y_offset:y_offset + insert_resized.shape[0], x_offset:x_offset + insert_resized.shape[1]]\
+        img_gc[y_offset:y_offset + insert_resized.shape[0], x_offset:x_offset + insert_resized.shape[1]] \
             = insert_resized
         cv.imwrite(gc_f_path, img_gc)
 
@@ -95,7 +95,14 @@ class LoteriaGenerator(object):
         for i in range(self._gc_count):
             print("  *Creating game card {}".format(i + 1))
             gc_insert_f_path = gc_insert_out_dir + '/game_card_insert_' + str(i + 1) + ".png"
-            gc_f_path = gc_out_dir + '/game_card_' + str(i + 1) + ".png"
+
+            # Append a 0 if index less than 9
+            if i < 9:
+                gc_number = "0" + str(i + 1)
+            else:
+                gc_number = str(i + 1)
+
+            gc_f_path = gc_out_dir + '/game_card_' + gc_number + ".png"
             self.__create_game_card_image(i, self._game_card_sets[i], gc_insert_f_path, gc_f_path)
 
         print("Created {} game cards at {}\n".format(self._gc_count, gc_out_dir))
@@ -210,7 +217,27 @@ class LoteriaGenerator(object):
                 h.clear()
 
             img = np.vstack(v)
-            cv.imwrite(out_dir + "/calling_card_sheet_" + str(s + 1) + ".png", img)
+
+            # Now resize the image and paste into a white background image to add margins
+            margin = 45
+            blank_width = 1545
+            blank_height = 2000
+            img_margin = np.full([blank_height, blank_width, 3], 255)
+            desired_width = blank_width - 2 * margin
+            desired_height = int((desired_width / img.shape[1]) * img.shape[0])
+            img_resized = cv.resize(img, (desired_width, desired_height), interpolation=cv.INTER_AREA)
+            y_offset = int((img_margin.shape[0] - img_resized.shape[0]) / 2)
+            img_margin[y_offset:y_offset + img_resized.shape[0], margin:margin + img_resized.shape[1]] \
+                = img_resized
+
+            # Append 0 if index less than 9
+            if s < 9:
+                gc_number = "0" + str(s + 1)
+            else:
+                gc_number = str(s + 1)
+
+            # cv.imwrite(out_dir + "/calling_card_sheet_" + gc_number + ".png", img)
+            cv.imwrite(out_dir + "/calling_card_sheet_" + gc_number + ".png", img_margin)
         print("Created {} calling card sheets at {}".format(num_sheets, out_dir))
 
     def __create_report(self):
