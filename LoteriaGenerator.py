@@ -9,7 +9,7 @@ import cv2 as cv
 
 
 class LoteriaGenerator(object):
-    def __init__(self, cc_count, gc_count, gc_cols, gc_rows):
+    def __init__(self, cc_count=0, gc_count=0, gc_cols=0, gc_rows=0):
         self._cc_count = cc_count
         self._gc_count = gc_count
         self._gc_cols = gc_cols
@@ -19,6 +19,20 @@ class LoteriaGenerator(object):
         self._cc_images = []
         self._gc_templ_images = []
         self._game_card_sets = []
+
+    def set_cc_count(self, cc_count):
+        self._cc_count = cc_count
+
+    def set_gc_count(self, gc_count):
+        self._gc_count = gc_count
+
+    def set_gc_cols(self, gc_cols):
+        self._gc_cols = gc_cols
+        self._k = gc_cols * self._gc_rows
+
+    def set_gc_rows(self, gc_rows):
+        self._gc_rows = gc_rows
+        self._k = self._gc_cols * gc_rows
 
     def __get_images(self):
         cc_path = self._PIC_DIR + '/input/calling_cards'
@@ -75,21 +89,32 @@ class LoteriaGenerator(object):
             = insert_resized
         cv.imwrite(gc_f_path, img_gc)
 
-    def __assemble(self):
+    def __assemble(self, reuse):
         """Assemble everything
             - Create the game card insert images.
             - Put the game card insert images inside the game card template images
-            - Create the calling card sheets
+            - Create the calling card sheets unless reuse=True
         """
 
         # Get the directories ready
-        self.__verify_output_directory(self._PIC_DIR + '/output')
         gc_insert_out_dir = self._PIC_DIR + '/output/game_card_inserts'
         gc_out_dir = self._PIC_DIR + '/output/game_cards'
         cc_sheets_out_dir = self._PIC_DIR + '/output/calling_card_sheets'
-        os.makedirs(gc_insert_out_dir)
-        os.makedirs(gc_out_dir)
-        os.makedirs(cc_sheets_out_dir)
+        if reuse:
+            # If reusing, directories should be fine, clean subdirectories except for calling cards
+            try:
+                shutil.rmtree(gc_insert_out_dir)
+                shutil.rmtree(gc_out_dir)
+            except OSError as e:
+                print("Error: %s" % e.strerror)
+            os.mkdir(gc_insert_out_dir)  # shutil.rmtree() also deletes directory, so recreate it
+            os.mkdir(gc_out_dir)
+        else:
+            # If not reusing, clean entire output directory and create the subdirectories
+            self.__verify_output_directory(self._PIC_DIR + '/output')
+            os.makedirs(gc_insert_out_dir)
+            os.makedirs(gc_out_dir)
+            os.makedirs(cc_sheets_out_dir)
 
         # Assemble the game cards
         for i in range(self._gc_count):
@@ -108,21 +133,28 @@ class LoteriaGenerator(object):
         print("Created {} game cards at {}\n".format(self._gc_count, gc_out_dir))
 
         # Create the calling card sheets
-        self.__create_calling_card_sheet_images(cc_sheets_out_dir)
+        if not reuse:
+            self.__create_calling_card_sheet_images(cc_sheets_out_dir)
 
-    def create_game_cards(self):
+    def create_game_cards(self, reuse=False):
+        """ Public function to create the game cards based on the parameters given. If reuse is True,
+            program will reuse the same input images and will not recreate the calling cards. This is efficient
+            when running the program multiple times to create multiple versions of the game sets"""
+
         # Sanity check
         if self._gc_cols < 2 or self._gc_rows < 2:
             print("Need at least 2 columns and rows! Aborting...")
             return
 
         # Get the images of the calling cards and game card templates
-        if not self.__get_images():
-            return
+        if not reuse:
+            if not self.__get_images():
+                return
 
         # Create a random unique sample set for each game card until user satisfied with the statistics
         while True:
             game_card_sets_sorted = []
+            self._game_card_sets.clear()
             for i in range(self._gc_count):
                 while True:
                     s = random.sample(range(1, self._cc_count + 1), self._k)
@@ -140,7 +172,7 @@ class LoteriaGenerator(object):
             if confirmation == 'y':
                 print("Creating game cards, please wait..")
                 plt.close('all')
-                self.__assemble()
+                self.__assemble(reuse)
                 # self.create_report()
                 break
             elif confirmation == 'q':
@@ -149,10 +181,8 @@ class LoteriaGenerator(object):
                 break
             elif confirmation == 'n':
                 print("Recreating the game cards..")
-                self._game_card_sets.clear()  # Clear the list
             else:
                 print("Don't know what you mean, will assume you meant no.")
-                self._game_card_sets.clear()  # Clear the list
 
     def __confirm_stats(self):
         """Display some statistics of generated game cards and confirm ok with user to proceed"""
@@ -257,7 +287,7 @@ class LoteriaGenerator(object):
         _file.close()
 
     def __verify_output_directory(self, out_dir):
-        """Verify the output directory
+        """Verify the output directory exists
             If it doesn't, create it.
             If it does, check if emtpy and warn user to move the files since they will be deleted
             """
